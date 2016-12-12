@@ -1,4 +1,4 @@
-package randhoundco
+package randherd
 
 import (
 	"sync"

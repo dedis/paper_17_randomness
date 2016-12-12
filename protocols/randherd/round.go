@@ -1,7 +1,7 @@
 // This file contains all the code to run one execution of a JVSS-based CoSi
 // protocol. It outputs a signature which can be verified against the aggregated
 // longterm public keys of all JVSS groups involved.
-package randhoundco
+package randherd
 
 import (
 	"bytes"
@@ -262,7 +262,7 @@ func (r *roundRoot) onResponse(resps []abstract.Scalar) {
 	}
 }
 
-// SignatureHook is the type of the function that is called when a randhoundco
+// SignatureHook is the type of the function that is called when a randherd
 // signature has been generated.
 type SignatureHook func(sig []byte)
 
@@ -273,7 +273,7 @@ func (r *roundRoot) RegisterOnSignature(fn SignatureHook) {
 }
 
 // VerifySignature returns nil if the signature issued for a round of
-// randhoundco is valid or an error otherwise. aggPublic is the Aggregate
+// randherd is valid or an error otherwise. aggPublic is the Aggregate
 // Longterm Distributed Public Keys of ALL JVSS groups.
 func VerifySignature(suite abstract.Suite, aggPublic abstract.Point, msg, sig []byte) error {
 	buffer := bytes.NewBuffer(sig)

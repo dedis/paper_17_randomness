@@ -1,6 +1,6 @@
-// This file contains all the code to SETUP (setup.go) a randhoundco system and launch
+// This file contains all the code to SETUP (setup.go) a randherd system and launch
 // rounds of JVSS-based CoSi protocol (round.go).
-package randhoundco
+package randherd
 
 import (
 	"sync"

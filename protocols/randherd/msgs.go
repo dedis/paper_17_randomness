@@ -1,4 +1,4 @@
-package randhoundco
+package randherd
 
 import (
 	"log"
@@ -21,7 +21,7 @@ type GroupRequest struct {
 	Nodes []*network.ServerIdentity
 }
 
-// GroupRequests is given to the root / client of the randhoundcoSetup
+// GroupRequests is given to the root / client of the randherdSetup
 // protocol so it knows the full topology of JVSS groups to create.
 // This message is passed down the tree when the SetupClient protocol is
 // launched.

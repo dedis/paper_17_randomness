@@ -1,4 +1,4 @@
-package randhoundco
+package randherd
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ import (
 const SetupProto = "RandhoundCoSetup"
 
 // setupRoot is the protocol ran by the client who wishes to setup the full
-// randhoundco system given some JVSS groups to create.
+// randherd system given some JVSS groups to create.
 type setupRoot struct {
 	*setupNode
 	// the groups requested

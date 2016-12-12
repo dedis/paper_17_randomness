@@ -1,4 +1,4 @@
-package randhoundco
+package randherd
 
 import (
 	"crypto/rand"
@@ -18,7 +18,7 @@ func init() {
 // Simulation implements a JVSS simulation
 type Simulation struct {
 	sda.SimulationBFTree
-	// number of JVSS groups randhoundco will generate
+	// number of JVSS groups randherd will generate
 	// If not set, then GroupSize is used
 	Groups int
 	// number of nodes per JVSS groups
@@ -36,7 +36,7 @@ func NewSimulation(config string) (sda.Simulation, error) {
 	return r, nil
 }
 
-// Setup creates the tree used by the randhoundco simulation.
+// Setup creates the tree used by the randherd simulation.
 func (r *Simulation) Setup(dir string, hosts []string) (*sda.SimulationConfig, error) {
 	sim := new(sda.SimulationConfig)
 	r.CreateRoster(sim, hosts, 2000)
@@ -66,7 +66,7 @@ func (r *Simulation) Run(config *sda.SimulationConfig) error {
 
 	setupM := monitor.NewTimeMeasure("setup")
 	// wait for the setup the setup
-	log.Lvl1("Starting setup of randhoundco")
+	log.Lvl1("Starting setup of randherd")
 	p.Start()
 	setupM.Record()
 
