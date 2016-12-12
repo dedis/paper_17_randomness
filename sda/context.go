@@ -26,7 +26,8 @@ func newContext(c *Conode, o *Overlay, servID ServiceID, manager *serviceManager
 // NewTreeNodeInstance creates a TreeNodeInstance that is bound to a
 // service instead of the Overlay.
 func (c *Context) NewTreeNodeInstance(t *Tree, tn *TreeNode, protoName string) *TreeNodeInstance {
-	return c.overlay.NewTreeNodeInstanceFromService(t, tn, ProtocolNameToID(protoName), c.servID)
+	io := c.overlay.protoIO.getByName(protoName)
+	return c.overlay.NewTreeNodeInstanceFromService(t, tn, ProtocolNameToID(protoName), c.servID, io)
 }
 
 // SendRaw sends a message to the ServerIdentity.
@@ -57,6 +58,15 @@ func (c *Context) CreateProtocolSDA(name string, t *Tree) (ProtocolInstance, err
 	return pi, err
 }
 
+// ProtocolRegister signs up a new protocol to this Conode. Contrary go
+// GlobalProtocolRegister, the protocol registered here is tied to that conode.
+// This is useful for simulations where more than one Conode exists in the
+// global namespace.
+// It returns the ID of the protocol.
+func (c *Context) ProtocolRegister(name string, protocol NewProtocol) (ProtocolID, error) {
+	return c.conode.ProtocolRegister(name, protocol)
+}
+
 // RegisterProtocolInstance registers a new instance of a protocol using overlay.
 func (c *Context) RegisterProtocolInstance(pi ProtocolInstance) error {
 	return c.overlay.RegisterProtocolInstance(pi)
@@ -76,6 +86,12 @@ func (c *Context) RegisterStatusReporter(name string, s StatusReporter) {
 // It delegates the dispatching to the serviceManager.
 func (c *Context) RegisterProcessor(p network.Processor, msgType network.PacketTypeID) {
 	c.manager.RegisterProcessor(p, msgType)
+}
+
+// RegisterProcessorFunc takes a message-type and a function that will be called
+// if this message-type is received.
+func (c *Context) RegisterProcessorFunc(msgType network.PacketTypeID, fn func(*network.Packet)) {
+	c.manager.RegisterProcessorFunc(msgType, fn)
 }
 
 // Service returns the corresponding service.

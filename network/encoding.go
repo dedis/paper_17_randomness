@@ -36,12 +36,17 @@ var ErrorType = PacketTypeID(uuid.Nil)
 
 // String returns the name of the structure if it is known, else it returns
 // the hexadecimal value of the Id.
-func (mId PacketTypeID) String() string {
-	t, ok := registry.get(mId)
+func (pId PacketTypeID) String() string {
+	t, ok := registry.get(pId)
 	if ok {
 		return t.String()
 	}
-	return fmt.Sprintf("%x", uuid.UUID(mId))
+	return uuid.UUID(pId).String()
+}
+
+// Equal returns true if pId is equal to t
+func (pId PacketTypeID) Equal(t PacketTypeID) bool {
+	return bytes.Compare(uuid.UUID(pId).Bytes(), uuid.UUID(t).Bytes()) == 0
 }
 
 // NamespaceURL is the basic namespace used for uuid
@@ -72,7 +77,6 @@ func RegisterPacketUUID(mt PacketTypeID, rt reflect.Type) PacketTypeID {
 		return mt
 	}
 	registry.put(mt, rt)
-
 	return mt
 }
 
@@ -181,13 +185,13 @@ var marshalLock sync.Mutex
 
 // MarshalRegisteredType will marshal a struct with its respective type into a
 // slice of bytes. That slice of bytes can be then decoded in
-// UnmarshalRegisteredType.
+// UnmarshalRegisteredType. data must be a pointer to the message.
 func MarshalRegisteredType(data Body) ([]byte, error) {
 	marshalLock.Lock()
 	defer marshalLock.Unlock()
 	var msgType PacketTypeID
 	if msgType = TypeFromData(data); msgType == ErrorType {
-		return nil, fmt.Errorf("Type of message %s not registered to the network library.", reflect.TypeOf(data))
+		return nil, fmt.Errorf("type of message %s not registered to the network library", reflect.TypeOf(data))
 	}
 	b := new(bytes.Buffer)
 	if err := binary.Write(b, globalOrder, msgType); err != nil {
@@ -217,7 +221,7 @@ func UnmarshalRegisteredType(buf []byte, constructors protobuf.Constructors) (Pa
 	}
 	typ, ok := registry.get(tID)
 	if !ok {
-		return ErrorType, nil, fmt.Errorf("Type %s not registered.",
+		return ErrorType, nil, fmt.Errorf("type %s not registered",
 			typ.Name())
 	}
 	ptrVal := reflect.New(typ)
@@ -238,7 +242,7 @@ func UnmarshalRegistered(buf []byte) (PacketTypeID, Body, error) {
 	}
 	typ, ok := registry.get(tID)
 	if !ok {
-		return ErrorType, nil, fmt.Errorf("Type %s not registered.",
+		return ErrorType, nil, fmt.Errorf("type %s not registered",
 			tID)
 	}
 	ptrVal := reflect.New(typ)
@@ -270,7 +274,7 @@ func (am *Packet) UnmarshalBinary(buf []byte) error {
 func NewNetworkPacket(obj Body) (*Packet, error) {
 	val := reflect.ValueOf(obj)
 	if val.Kind() != reflect.Ptr {
-		return nil, fmt.Errorf("Send takes a pointer to the message, not a copy...")
+		return nil, fmt.Errorf("Expected a pointer to the message")
 	}
 	ty := TypeFromData(obj)
 	if ty == ErrorType {

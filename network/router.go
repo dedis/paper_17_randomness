@@ -34,7 +34,7 @@ type Router struct {
 	// can be opened at the same time on both endpoints, there can be more
 	// than one connection per ServerIdentityID.
 	connections map[ServerIdentityID][]Conn
-	connsMut    sync.Mutex
+	sync.Mutex
 
 	// boolean flag indicating that the router is already clos{ing,ed}.
 	isClosed bool
@@ -71,9 +71,16 @@ func (r *Router) Start() {
 			}
 			return
 		}
-		// start handleConn that waits for incoming messages and
+		if err := r.registerConnection(dst, c); err != nil {
+			log.Lvl3(r.address, "does not accept incoming connection to", c.Remote(), "because it's closed")
+			return
+		}
+		// start handleConn in a go routine that waits for incoming messages and
 		// dispatches them.
-		r.launchHandleRoutine(dst, c)
+		if err := r.launchHandleRoutine(dst, c); err != nil {
+			log.Lvl3(r.address, "does not accept incoming connection to", c.Remote(), "because it's closed")
+			return
+		}
 	})
 	if err != nil {
 		log.Error("Error listening:", err)
@@ -86,10 +93,8 @@ func (r *Router) Start() {
 // Router.
 func (r *Router) Stop() error {
 	var err error
-	//if r.host.Listening() {
 	err = r.host.Stop()
-	//}
-	r.connsMut.Lock()
+	r.Lock()
 	// set the isClosed to true
 	r.isClosed = true
 
@@ -102,14 +107,10 @@ func (r *Router) Stop() error {
 			}
 		}
 	}
-	r.connsMut.Unlock()
-
 	// wait for all handleConn to finish
+	r.Unlock()
 	r.wg.Wait()
 
-	r.connsMut.Lock()
-	r.isClosed = false
-	r.connsMut.Unlock()
 	if err != nil {
 		return err
 	}
@@ -165,11 +166,37 @@ func (r *Router) connect(si *ServerIdentity) (Conn, error) {
 		return nil, err
 	}
 
-	r.registerConnection(si, c)
+	if err := r.registerConnection(si, c); err != nil {
+		return nil, err
+	}
 
-	r.launchHandleRoutine(si, c)
+	if err := r.launchHandleRoutine(si, c); err != nil {
+		return nil, err
+	}
 	return c, nil
 
+}
+
+func (r *Router) removeConnection(si *ServerIdentity, c Conn) {
+	r.Lock()
+	defer r.Unlock()
+
+	var toDelete = -1
+	arr := r.connections[si.ID]
+	for i, cc := range arr {
+		if c == cc {
+			toDelete = i
+		}
+	}
+
+	if toDelete == -1 {
+		log.Error("Remove a connection which is not registered !?")
+		return
+	}
+
+	arr[toDelete] = arr[len(arr)-1]
+	arr[len(arr)-1] = nil
+	r.connections[si.ID] = arr[:len(arr)-1]
 }
 
 // handleConn waits for incoming messages and calls the dispatcher for
@@ -182,6 +209,7 @@ func (r *Router) handleConn(remote *ServerIdentity, c Conn) {
 			log.Lvl5(r.address, "having error closing conn to", remote.Address, ":", err)
 		}
 		r.wg.Done()
+		r.removeConnection(remote, c)
 	}()
 	address := c.Remote()
 	log.Lvl3(r.address, "Handling new connection to", remote.Address)
@@ -193,11 +221,14 @@ func (r *Router) handleConn(remote *ServerIdentity, c Conn) {
 		}
 
 		if err != nil {
-			log.Lvlf4("%+v got error (%+s) while receiving message", r.ServerIdentity.String(), err)
+			if err == ErrTimeout {
+				log.Lvlf5("%s drops %s connection: timeout", r.ServerIdentity.Address, remote.Address)
+				return
+			}
 
 			if err == ErrClosed || err == ErrEOF {
 				// Connection got closed.
-				log.Lvl3(r.address, "handleConn with closed connection: stop (dst=", remote.Address, ")")
+				log.Lvlf5("%s drops %s connection: closed", r.ServerIdentity.Address, remote.Address)
 				return
 			}
 			// Temporary error, continue.
@@ -218,8 +249,8 @@ func (r *Router) handleConn(remote *ServerIdentity, c Conn) {
 // connection returns the first connection associated with this ServerIdentity.
 // If no connection is found, it returns nil.
 func (r *Router) connection(sid ServerIdentityID) Conn {
-	r.connsMut.Lock()
-	defer r.connsMut.Unlock()
+	r.Lock()
+	defer r.Unlock()
 	arr := r.connections[sid]
 	if len(arr) == 0 {
 		return nil
@@ -230,35 +261,45 @@ func (r *Router) connection(sid ServerIdentityID) Conn {
 // registerConnection registers a ServerIdentity for a new connection, mapped with the
 // real physical address of the connection and the connection itself.
 // It uses the networkLock mutex.
-func (r *Router) registerConnection(remote *ServerIdentity, c Conn) {
+func (r *Router) registerConnection(remote *ServerIdentity, c Conn) error {
 	log.Lvl4(r.address, "Registers", remote.Address)
-	r.connsMut.Lock()
-	defer r.connsMut.Unlock()
+	r.Lock()
+	defer r.Unlock()
+	if r.isClosed {
+		return ErrClosed
+	}
 	_, okc := r.connections[remote.ID]
 	if okc {
 		log.Lvl5("Connection already registered. Appending new connection to same identity.")
 	}
 	r.connections[remote.ID] = append(r.connections[remote.ID], c)
+	return nil
 }
 
-func (r *Router) launchHandleRoutine(dst *ServerIdentity, c Conn) {
+func (r *Router) launchHandleRoutine(dst *ServerIdentity, c Conn) error {
+	r.Lock()
+	defer r.Unlock()
+	if r.isClosed {
+		return ErrClosed
+	}
 	r.wg.Add(1)
 	go r.handleConn(dst, c)
+	return nil
 }
 
 // Closed returns true if the router is closed (or is closing). For a router
 // to be closed means that a call to Stop() must have been made.
 func (r *Router) Closed() bool {
-	r.connsMut.Lock()
-	defer r.connsMut.Unlock()
+	r.Lock()
+	defer r.Unlock()
 	return r.isClosed
 }
 
 // Tx implements monitor/CounterIO
 // It returns the Tx for all connections managed by this router
 func (r *Router) Tx() uint64 {
-	r.connsMut.Lock()
-	defer r.connsMut.Unlock()
+	r.Lock()
+	defer r.Unlock()
 	var tx uint64
 	for _, arr := range r.connections {
 		for _, c := range arr {
@@ -271,8 +312,8 @@ func (r *Router) Tx() uint64 {
 // Rx implements monitor/CounterIO
 // It returns the Rx for all connections managed by this router
 func (r *Router) Rx() uint64 {
-	r.connsMut.Lock()
-	defer r.connsMut.Unlock()
+	r.Lock()
+	defer r.Unlock()
 	var rx uint64
 	for _, arr := range r.connections {
 		for _, c := range arr {
@@ -307,6 +348,5 @@ func (r *Router) receiveServerIdentity(c Conn) (*ServerIdentity, error) {
 		return nil, err
 	}
 	log.Lvl4(r.address, "Identity received from", dst.Address)
-	r.registerConnection(&dst, c)
 	return &dst, nil
 }

@@ -4,10 +4,14 @@ import (
 	"testing"
 
 	"github.com/dedis/cothority/log"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestTreeNodeCreateProtocol(t *testing.T) {
+func init() {
 	GlobalProtocolRegister(spawnName, newSpawnProto)
+}
+
+func TestTreeNodeCreateProtocol(t *testing.T) {
 	local := NewLocalTest()
 	defer local.CloseAll()
 
@@ -22,6 +26,19 @@ func TestTreeNodeCreateProtocol(t *testing.T) {
 	<-spawnCh
 	// wait once more for the protocol created inside the first one
 	<-spawnCh
+}
+
+func TestHandlerReturn(t *testing.T) {
+	local := NewLocalTest()
+	defer local.CloseAll()
+
+	hosts, _, tree := local.GenTree(1, true)
+	pi, err := hosts[0].overlay.CreateProtocolSDA(spawnName, tree)
+	log.ErrFatal(err)
+	p := pi.(*spawnProto)
+	assert.NotNil(t, p.RegisterHandler(p.HandlerError1))
+	assert.Nil(t, p.RegisterHandler(p.HandlerError2))
+	assert.NotNil(t, p.RegisterHandler(p.HandlerError3))
 }
 
 // spawnCh is used to dispatch information from a spawnProto to the test
@@ -55,55 +72,20 @@ func (s *spawnProto) Start() error {
 	return nil
 }
 
-func TestTreeNodeSendToItSelf(t *testing.T) {
-	log.TestOutput(true, 5)
-	GlobalProtocolRegister(ownName, newOwnProto)
-	local := NewLocalTest()
-	defer local.CloseAll()
-
-	hosts, _, tree := local.GenTree(1, true)
-	pi, err := hosts[0].overlay.CreateProtocolSDA(ownName, tree)
-	log.ErrFatal(err)
-	go pi.Start()
-
-	log.Print("waiting on ownCh")
-	<-ownCh
-
-}
-
-var ownCh = make(chan bool)
-
-const ownName = "Own"
-
-type OwnMessage struct {
-	Val int
-}
-
-type wrapOwn struct {
+type spawnMsg struct {
 	*TreeNode
-	OwnMessage
+	I int
 }
 
-// ownProto is a protocol that sends a message to itself
-type ownProto struct {
-	*TreeNodeInstance
-}
+// Invalid handler
+func (s *spawnProto) HandlerError1(msg spawnMsg) {}
 
-func newOwnProto(tn *TreeNodeInstance) (ProtocolInstance, error) {
-	o := &ownProto{tn}
-	o.RegisterHandler(o.receiveOwnMsg)
-	return o, nil
-}
-
-func (o *ownProto) Start() error {
-	log.Print("Sending to ourself")
-	err := o.SendTo(o.TreeNode(), &OwnMessage{12})
-	log.Print("Sent to ourself DONE", err)
+// Valid handler
+func (s *spawnProto) HandlerError2(msg spawnMsg) error {
 	return nil
 }
 
-func (o *ownProto) receiveOwnMsg(wrap wrapOwn) error {
-	ownCh <- true
-	o.Done()
-	return nil
+// Invalid handler
+func (s *spawnProto) HandlerError3(msg spawnMsg) (int, error) {
+	return 0, nil
 }

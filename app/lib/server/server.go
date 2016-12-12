@@ -27,9 +27,9 @@ import (
 	"github.com/dedis/crypto/cosi"
 	// Empty imports to have the init-functions called which should
 	// register the protocol.
-	_ "github.com/dedis/cosi/protocol"
+	_ "github.com/dedis/cothority/protocols/cosi"
 	// For the moment, the server only serves CoSi requests
-	s "github.com/dedis/cosi/service"
+	s "github.com/dedis/cothority/services/cosi"
 	"github.com/dedis/crypto/abstract"
 	crypconf "github.com/dedis/crypto/config"
 )
@@ -51,7 +51,7 @@ const DefaultAddress = "127.0.0.1"
 const whatsMyIP = "http://www.whatsmyip.org/"
 
 // RequestTimeOut is how long we're willing to wait for a signature.
-var RequestTimeOut = time.Second * 1
+var RequestTimeOut = time.Second * 10
 
 // InteractiveConfig uses stdin to get the [address:]PORT of the server.
 // If no address is given, whatsMyIP is used to find the public IP. In case
@@ -147,12 +147,14 @@ func InteractiveConfig(binaryName string) {
 	conf := &config.CothoritydConfig{
 		Public:  pubStr,
 		Private: privStr,
-		Address: serverBinding,
+		Address: publicAddress,
+		Description: config.Input("New cothority",
+			"Give a description of the cothority"),
 	}
 
 	var configDone bool
 	var configFolder string
-	var defaultFolder = path.Dir(getDefaultConfigFile(binaryName))
+	var defaultFolder = path.Dir(GetDefaultConfigFile(binaryName))
 	var configFile string
 	var groupFile string
 
@@ -180,7 +182,7 @@ func InteractiveConfig(binaryName string) {
 		log.Fatal("Impossible to parse public key:", err)
 	}
 
-	server := config.NewServerToml(network.Suite, public, publicAddress)
+	server := config.NewServerToml(network.Suite, public, publicAddress, conf.Description)
 	group := config.NewGroupToml(server)
 
 	saveFiles(conf, configFile, group, groupFile)
@@ -218,21 +220,22 @@ func CheckServers(g *config.Group) error {
 			desc = []string{d, d}
 		}
 		el := sda.NewRoster([]*network.ServerIdentity{e})
-		success = success && checkList(el, desc) == nil
+		success = checkList(el, desc) == nil && success
 	}
 	if len(g.Roster.List) > 1 {
 		// Then check pairs of servers
 		for i, first := range g.Roster.List {
 			for _, second := range g.Roster.List[i+1:] {
+				log.Lvl3("Testing connection between", first, second)
 				desc := []string{"none", "none"}
 				if d1 := g.GetDescription(first); d1 != "" {
 					desc = []string{d1, g.GetDescription(second)}
 				}
 				es := []*network.ServerIdentity{first, second}
-				success = success && checkList(sda.NewRoster(es), desc) == nil
+				success = checkList(sda.NewRoster(es), desc) == nil && success
 				es[0], es[1] = es[1], es[0]
 				desc[0], desc[1] = desc[1], desc[0]
-				success = success && checkList(sda.NewRoster(es), desc) == nil
+				success = checkList(sda.NewRoster(es), desc) == nil && success
 			}
 		}
 	}
@@ -255,7 +258,7 @@ func checkList(list *sda.Roster, descs []string) error {
 	}
 	log.Lvl3("Sending message to: " + serverStr)
 	msg := "verification"
-	log.Info("Checking server(s) ", serverStr, ": ")
+	fmt.Printf("Checking server(s) %s: ", serverStr)
 	sig, err := signStatement(strings.NewReader(msg), list)
 	if err != nil {
 		log.Error(err)
@@ -266,7 +269,7 @@ func checkList(list *sda.Roster, descs []string) error {
 		log.Errorf("Invalid signature: %v", err)
 		return err
 	}
-	log.Info("Success")
+	fmt.Print("Success\n")
 	return nil
 }
 
@@ -297,7 +300,7 @@ func signStatement(read io.Reader, el *sda.Roster) (*s.SignatureResponse,
 	case response, ok := <-pchan:
 		log.Lvl5("Response:", response)
 		if !ok || err != nil {
-			return nil, errors.New("Received an invalid repsonse.")
+			return nil, errors.New("received an invalid response")
 		}
 		err = cosi.VerifySignature(network.Suite, el.Publics(), msg, response.Signature)
 		if err != nil {
@@ -389,10 +392,10 @@ func saveFiles(conf *config.CothoritydConfig, fileConf string, group *config.Gro
 
 }
 
-// getDefaultConfigFile returns the default path to the configuration-path, which
+// GetDefaultConfigFile returns the default path to the configuration-path, which
 // is ~/.config/binaryName for Unix and ~/Library/binaryName for MacOSX.
 // In case of an error it Fatals.
-func getDefaultConfigFile(binaryName string) string {
+func GetDefaultConfigFile(binaryName string) string {
 	u, err := user.Current()
 	// can't get the user dir, so fallback to current working dir
 	if err != nil {
@@ -409,7 +412,7 @@ func getDefaultConfigFile(binaryName string) string {
 		return path.Join(u.HomeDir, "Library", binaryName, DefaultServerConfig)
 	default:
 		return path.Join(u.HomeDir, ".config", binaryName, DefaultServerConfig)
-		// TODO WIndows ? FreeBSD ?
+		// TODO Windows? FreeBSD?
 	}
 }
 
@@ -495,4 +498,18 @@ func tryConnect(ip, binding network.Address) error {
 		return errors.New("Address unreachable")
 	}
 	return nil
+}
+
+// RunServer starts a cothority server with the given config file name. It can
+// be used by different apps (like CoSi, for example)
+func RunServer(configFilename string) {
+	if _, err := os.Stat(configFilename); os.IsNotExist(err) {
+		log.Fatalf("[-] Configuration file does not exists. %s", configFilename)
+	}
+	// Let's read the config
+	_, conode, err := config.ParseCothorityd(configFilename)
+	if err != nil {
+		log.Fatal("Couldn't parse config:", err)
+	}
+	conode.Start()
 }
