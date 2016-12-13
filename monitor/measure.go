@@ -3,7 +3,6 @@ package monitor
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"time"
 
@@ -191,7 +190,8 @@ func (cm *CounterIOMeasure) Record() {
 // Send transmits the given struct over the network.
 func send(v interface{}) error {
 	if encoder == nil {
-		return fmt.Errorf("Monitor's sink connection not initalized. Can not send any measures")
+		//return fmt.Errorf("Monitor's sink connection not initalized. Can not send any measures")
+		return nil
 	}
 	if !enabled {
 		return nil
