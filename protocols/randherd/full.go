@@ -5,8 +5,8 @@ package randherd
 import (
 	"sync"
 
-	cosip "github.com/dedis/cosi/protocol"
 	"github.com/dedis/cothority/log"
+	cosip "github.com/dedis/cothority/protocols/cosi"
 	"github.com/dedis/cothority/protocols/jvss"
 	"github.com/dedis/cothority/sda"
 )
@@ -42,7 +42,7 @@ type fullProto struct {
 }
 
 func newFullProto(n *sda.TreeNodeInstance) (*fullProto, error) {
-	p, err := cosip.NewCoSi(n)
+	p, err := cosip.NewProtocol(n)
 	go p.Dispatch()
 	cm := &fullProto{
 		TreeNodeInstance: n,
@@ -187,7 +187,7 @@ func (fp *fullProto) setupCatch() {
 	if fp.catch != nil {
 		fp.catch.Done()
 	}
-	p, err := cosip.NewCoSi(fp.TreeNodeInstance)
+	p, err := cosip.NewProtocol(fp.TreeNodeInstance)
 	if err != nil {
 		log.Error(err)
 	}

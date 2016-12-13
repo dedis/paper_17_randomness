@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"errors"
 
-	cosip "github.com/dedis/cosi/protocol"
 	"github.com/dedis/cothority/log"
+	cosip "github.com/dedis/cothority/protocols/cosi"
 	"github.com/dedis/cothority/protocols/jvss"
 	"github.com/dedis/cothority/sda"
 	"github.com/dedis/crypto/abstract"
@@ -65,13 +65,13 @@ func NewRoundRoot(n *sda.TreeNodeInstance, msg []byte, aggJVSSLongterm abstract.
 		aggJVSSLongterm: aggJVSSLongterm,
 	}
 	rc.cosi.RegisterCommitmentHook(rc.onCommitment)
-	rc.cosi.RegisterResponseHook(rc.onResponse, true)
+	rc.cosi.RegisterResponseHook(rc.onResponse)
 	return rc, err
 }
 
 // NewRandhoundCoNode returns a protocol which designates a leader of a JVSS / group in the big Randhound tree - intermediate node -
 func NewRoundNode(n *sda.TreeNodeInstance, jvssP *jvss.JVSS) (sda.ProtocolInstance, error) {
-	p, err := cosip.NewCoSi(n)
+	p, err := cosip.NewProtocol(n)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func NewRoundNode(n *sda.TreeNodeInstance, jvssP *jvss.JVSS) (sda.ProtocolInstan
 	rc.cosi.RegisterAnnouncementHook(rc.onAnnouncement)
 	rc.cosi.RegisterCommitmentHook(rc.onCommitment)
 	rc.cosi.RegisterChallengeHook(rc.onChallenge)
-	rc.cosi.RegisterResponseHook(rc.onResponse, true)
+	rc.cosi.RegisterResponseHook(rc.onResponse)
 	return rc, nil
 }
 
