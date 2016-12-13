@@ -4,12 +4,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alecthomas/assert"
 	"github.com/dedis/cothority/log"
 	"github.com/dedis/cothority/network"
 	"github.com/dedis/cothority/protocols/jvss"
 	"github.com/dedis/cothority/sda"
 	"github.com/dedis/crypto/poly"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
